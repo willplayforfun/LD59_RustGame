@@ -5,3 +5,9 @@ edition = "2021"
 
 [dependencies]
 macroquad = "0.4"
+# for dasp
+dasp = { version = "0.11", features = ["all"] }
+hound = "3.5"
+# for cpal
+cpal = "0.15"
+anyhow = "1.0"
