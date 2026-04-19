@@ -151,21 +151,104 @@ pub fn generate_star(
 
     let mut rgba = Vec::with_capacity(size * size * 4);
     for &l in &lum {
-        let display = l.min(1.0); // clamp: can't show more than full brightness
-
-        // Blend toward white as the pixel saturates.  At low luminance the star
-        // shows its blackbody colour; at high luminance all channels clip to 1.
-        // display² gives a smooth but rapid transition to white near the core.
-        let white_blend = display * display;
-        let r = display * lerp(sr, 1.0, white_blend);
-        let g = display * lerp(sg, 1.0, white_blend);
-        let b = display * lerp(sb, 1.0, white_blend);
-
-        // Convert linear light → sRGB (gamma 2.2) and write bytes.
+        let (r, g, b) = colorize(l, sr, sg, sb);
         rgba.push(to_srgb_u8(r));
         rgba.push(to_srgb_u8(g));
         rgba.push(to_srgb_u8(b));
-        rgba.push(to_srgb_u8(display)); // alpha tracks luminance; black = transparent
+        rgba.push(to_srgb_u8(l.min(1.0))); // alpha tracks luminance; black = transparent
+    }
+    rgba
+}
+
+// ─── Starfield Texture ───────────────────────────────────────────────────────
+
+/// Generates a static starfield as a `width × height` RGBA texture.
+///
+/// Returns a `Vec<u8>` of length `width * height * 4`, ready for
+/// `Texture2D::from_rgba8`.  Use `FilterMode::Nearest` when rendering so the
+/// pixel grid stays sharp when scaled up.
+///
+/// Stars are additively composited in **linear light** before gamma encoding,
+/// so overlapping halos add correctly without colour banding.
+///
+/// `star_size`  — PSF footprint per star in pixels (odd, ≤ 32).  A value of
+/// `density`    — average number of stars per 100 × 100 pixel area of the
+///               texture.  A value of 1.0 gives one star per 10 000 px²;
+///               2.0 – 4.0 produces a natural-looking field for typical
+///               160 × 120 or similar low-res backdrops.
+///               Star sizes are chosen randomly per star (see `random_star_size`).
+/// `seed`       — RNG seed; the same seed always produces the same field.
+pub fn generate_starfield(
+    width: usize,
+    height: usize,
+    density: f32,
+    psf: &PsfKernel,
+    seed: u64,
+) -> Vec<u8> {
+    // Derive total star count from texture area and density.
+    // density = stars per 10 000 px², so multiply area by density / 10 000.
+    let star_count = ((width * height) as f32 * density / 10_000.0).round() as usize;
+
+    let mut rng   = Rng::new(seed);
+
+    // Accumulate star contributions in linear light before gamma encoding.
+    let mut r_buf = vec![0.0f32; width * height];
+    let mut g_buf = vec![0.0f32; width * height];
+    let mut b_buf = vec![0.0f32; width * height];
+
+    for _ in 0..star_count {
+        // Random position anywhere in the texture (including near edges — the
+        // PSF blit clips out-of-bounds pixels, so halos are naturally cropped).
+        let cx = rng.next_f32() * width  as f32;
+        let cy = rng.next_f32() * height as f32;
+
+        // Nearest integer pixel centre and the fractional remainder.
+        let pixel_x = cx.round() as i32;
+        let pixel_y = cy.round() as i32;
+        let sub     = (cx - pixel_x as f32, cy - pixel_y as f32);
+
+        // Temperature: uniform across a plausible stellar range.
+        let kelvin = rng.range_f32(3_000.0, 20_000.0);
+
+        // Brightness: log-uniform so most stars are dim and a few are bright.
+        // exp([-2, 1.5]) spans roughly 0.14 – 4.5.
+        let brightness = f32::exp(rng.range_f32(-2.0, 1.5));
+
+        // Size varies per star: mostly tight 3-pixel points, occasionally larger.
+        let star_size = random_star_size(&mut rng);
+        let half      = (star_size / 2) as i32;
+
+        // Build the linear luminance map and bloom it, as in generate_star.
+        let mut lum = stamp_psf(star_size, brightness, psf, sub);
+        bloom(&mut lum, star_size, 4);
+
+        let (sr, sg, sb) = color_temperature_to_rgb(kelvin);
+
+        // Splat the star's linear RGB contribution onto the accumulation buffers.
+        for sy in 0..star_size {
+            for sx in 0..star_size {
+                let px = pixel_x + sx as i32 - half;
+                let py = pixel_y + sy as i32 - half;
+                if px < 0 || px >= width as i32 || py < 0 || py >= height as i32 {
+                    continue;
+                }
+                let (r, g, b) = colorize(lum[sy * star_size + sx], sr, sg, sb);
+                let dst = py as usize * width + px as usize;
+                r_buf[dst] += r;
+                g_buf[dst] += g;
+                b_buf[dst] += b;
+            }
+        }
+    }
+
+    // Gamma-encode the accumulated linear values and pack to RGBA.
+    // Clamping before gamma handles pixel overlap from bright nearby stars.
+    let mut rgba = Vec::with_capacity(width * height * 4);
+    for i in 0..width * height {
+        rgba.push(to_srgb_u8(r_buf[i]));
+        rgba.push(to_srgb_u8(g_buf[i]));
+        rgba.push(to_srgb_u8(b_buf[i]));
+        rgba.push(255); // fully opaque — starfield has its own black background
     }
     rgba
 }
@@ -264,6 +347,69 @@ fn bloom(lum: &mut [f32], size: usize, iterations: u32) {
                 if y < size - 1 { lum[(y + 1) * size + x]     += share; }
             }
         }
+    }
+}
+
+/// Picks a star texture size (odd pixels) from a weighted distribution.
+///
+/// Most stars are tight 3-pixel points; a smaller fraction spread to 5 or 7
+/// pixels.  All sizes are odd so there is always a single centre pixel.
+///
+/// | size | weight | typical appearance            |
+/// |------|--------|-------------------------------|
+/// |  3   |  70 %  | single bright pixel + faint rim|
+/// |  5   |  22 %  | small soft disc               |
+/// |  7   |   8 %  | larger halo, rare bright star |
+fn random_star_size(rng: &mut Rng) -> usize {
+    match rng.next_f32() {
+        r if r < 0.70 => 3,
+        r if r < 0.92 => 5,
+        _             => 7,
+    }
+}
+
+/// Applies colour temperature and saturation-to-white fade to a luminance value.
+/// Returns **linear** (r, g, b) — caller must gamma-encode before writing bytes.
+#[inline]
+fn colorize(lum: f32, sr: f32, sg: f32, sb: f32) -> (f32, f32, f32) {
+    let display     = lum.min(1.0);
+    let white_blend = display * display; // smooth, rapid fade to white near core
+    (
+        display * lerp(sr, 1.0, white_blend),
+        display * lerp(sg, 1.0, white_blend),
+        display * lerp(sb, 1.0, white_blend),
+    )
+}
+
+/// Minimal seeded RNG based on xorshift64.
+///
+/// Not cryptographic, but uniform and fast enough for procedural generation.
+/// The same seed always produces the same sequence — useful for reproducible
+/// starfields.
+struct Rng(u64);
+
+impl Rng {
+    fn new(seed: u64) -> Self {
+        // Ensure the state is never zero (xorshift is stuck at 0 forever).
+        Rng(if seed == 0 { 0xDEAD_BEEF_CAFE_1234 } else { seed })
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        // Standard xorshift64 constants.
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        self.0
+    }
+
+    /// Returns a uniform float in [0.0, 1.0).
+    fn next_f32(&mut self) -> f32 {
+        // Use the upper 32 bits for better distribution.
+        (self.next_u64() >> 32) as f32 / (u32::MAX as f32 + 1.0)
+    }
+
+    fn range_f32(&mut self, min: f32, max: f32) -> f32 {
+        min + self.next_f32() * (max - min)
     }
 }
 
@@ -384,6 +530,41 @@ mod tests {
         let r    = rgba[idx];
         let b    = rgba[idx + 2];
         assert!(r > b, "3000K star centre should be redder than blue, got r={r} b={b}");
+    }
+
+    #[test]
+    // ── generate_starfield ───────────────────────────────────────────────────
+
+    #[test]
+    fn starfield_output_has_correct_length() {
+        let psf  = gaussian_psf(9, 2.0);
+        let rgba = generate_starfield(160, 120, 2.0, &psf, 42);
+        assert_eq!(rgba.len(), 160 * 120 * 4);
+    }
+
+    #[test]
+    fn starfield_is_not_all_black() {
+        // density=5.0 on a 160×120 field → ~96 stars, enough to guarantee lit pixels.
+        let psf     = gaussian_psf(9, 2.0);
+        let rgba    = generate_starfield(160, 120, 5.0, &psf, 42);
+        let any_lit = rgba.chunks(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0);
+        assert!(any_lit, "starfield should contain at least one lit pixel");
+    }
+
+    #[test]
+    fn starfield_is_deterministic() {
+        let psf = gaussian_psf(9, 2.0);
+        let a   = generate_starfield(80, 60, 2.0, &psf, 99);
+        let b   = generate_starfield(80, 60, 2.0, &psf, 99);
+        assert_eq!(a, b, "same seed should produce identical output");
+    }
+
+    #[test]
+    fn starfield_differs_with_different_seed() {
+        let psf = gaussian_psf(9, 2.0);
+        let a   = generate_starfield(80, 60, 2.0, &psf, 1);
+        let b   = generate_starfield(80, 60, 2.0, &psf, 2);
+        assert_ne!(a, b, "different seeds should produce different fields");
     }
 
     #[test]
