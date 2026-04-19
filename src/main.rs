@@ -8,8 +8,12 @@ use macroquad::ui::{
 mod cpal_test;
 mod dasp_test;
 mod spectrum;
+mod spectral_lines;
+mod star;
 
-use spectrum::{GaussianDist, Spectrum, SpectrumRenderer};
+use std::collections::HashMap;
+use spectrum::SpectrumRenderer;
+use spectral_lines::{SpectralSource, build_spectrum};
 
 #[macroquad::main("Texture")]
 async fn main() {
@@ -21,16 +25,11 @@ async fn main() {
 
     let mut renderer = SpectrumRenderer::new(400.0, 750.0, 1.2).await;
 
-    let test_spectrum = Spectrum {
-        base: 1.,
-        adds: vec![
-        ],
-        subs: vec![
-            GaussianDist { mean: 470.0, sdev: 5.0, ampl: 0.9 },  // blue peak
-            GaussianDist { mean: 620.0, sdev: 3.0, ampl: 0.7 },  // red-orange peak
-            GaussianDist { mean: 530.0, sdev: 1.0, ampl: 0.3 },  // notch in green
-        ],
-    };
+    let abundances = HashMap::from([
+        (SpectralSource::Hydrogen, 0.9),
+        (SpectralSource::Sodium,   0.3),
+    ]);
+    let test_spectrum = build_spectrum(&abundances);
     renderer.update(&test_spectrum);
 
     loop {
