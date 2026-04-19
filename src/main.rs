@@ -1,14 +1,15 @@
 use macroquad::prelude::*;
 
-use macroquad::ui::widgets::{Slider};
 use macroquad::ui::{
     hash, root_ui,
     widgets::{self, Group},
-    Drag, Ui,
 };
 
 mod cpal_test;
 mod dasp_test;
+mod spectrum;
+
+use spectrum::{GaussianDist, Spectrum, SpectrumRenderer};
 
 #[macroquad::main("Texture")]
 async fn main() {
@@ -16,8 +17,21 @@ async fn main() {
 
     let sample_rate = cpal_test::get_sample_rate().expect("Failed to init audio");
     let signal = dasp_test::create_signal(sample_rate);
-    // _stream MUST be named (not `let _ = ...`) or audio stops right away
     let _stream = cpal_test::init_stream(signal).expect("Failed to start audio");
+
+    let mut renderer = SpectrumRenderer::new(20.0, 4000.0, 1.2).await;
+
+    let test_spectrum = Spectrum {
+        base: 0.1,
+        adds: vec![
+            GaussianDist { mean: 440.0,  sdev: 80.0,  ampl: 0.8 },
+            GaussianDist { mean: 1200.0, sdev: 200.0, ampl: 0.5 },
+        ],
+        subs: vec![
+            GaussianDist { mean: 800.0, sdev: 60.0, ampl: 0.3 },
+        ],
+    };
+    renderer.update(&test_spectrum);
 
     loop {
         clear_background(LIGHTGRAY);
@@ -25,23 +39,19 @@ async fn main() {
         let tw = texture.width();
         let th = texture.height();
         let dest_size = vec2(window_w, th / tw * window_w);
-        
-        draw_texture_ex(&texture,
-            0., 0.,
-            WHITE,
-            DrawTextureParams {
-                dest_size: Some(dest_size),
-                ..Default::default()
-            },
+
+        draw_texture_ex(&texture, 0., 0., WHITE, DrawTextureParams {
+            dest_size: Some(dest_size),
+            ..Default::default()
+        });
+
+        renderer.draw(
+            vec2(screen_width() * 0.25, screen_height() * 0.5),
+            vec2(screen_width() * 0.4, screen_height() * 0.4),
         );
 
-        // create a fake spectrum
-        // display it
-
         // UI
-        let pos = vec2(400., 200.);
-        let size = vec2(320., 400.);
-        widgets::Window::new(hash!(), pos, size)
+        widgets::Window::new(hash!(), vec2(400., 200.), vec2(320., 400.))
             .label("Shop")
             .titlebar(true)
             .ui(&mut *root_ui(), |ui| {
@@ -53,7 +63,7 @@ async fn main() {
                         });
                 }
             });
-        
+
         next_frame().await
     }
 }

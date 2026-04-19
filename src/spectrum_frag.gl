@@ -1,0 +1,58 @@
+#version 100
+precision mediump float;
+
+varying vec2 uv;
+
+uniform sampler2D gaussian_data;
+uniform float base;
+uniform int   adds_count;
+uniform int   subs_count;
+uniform float freq_min;
+uniform float freq_max;
+uniform float ampl_max;
+
+// Each texel holds (mean, sdev, ampl, unused), normalised to 0..1.
+// Row 0 = adds, row 1 = subs. +0.5 centres the sample on the texel.
+const float SLOTS = 8.0;
+
+vec4 read_gaussian(int row, int i) {
+    float x = (float(i) + 0.5) / SLOTS;
+    float y = (float(row) + 0.5) / 2.0;
+    return texture2D(gaussian_data, vec2(x, y));
+}
+
+float gaussian(float x, float mean, float sdev, float ampl) {
+    float d = (x - mean) / sdev;
+    return ampl * exp(-0.5 * d * d);
+}
+
+void main() {
+    float freq      = mix(freq_min, freq_max, uv.x);
+    float freq_range = freq_max - freq_min;
+    float amplitude = base;
+
+    for (int i = 0; i < 8; i++) {
+        if (i >= adds_count) break;
+        vec4 g = read_gaussian(0, i);
+        amplitude += gaussian(freq,
+            freq_min + g.r * freq_range,
+            g.g * freq_range,
+            g.b * ampl_max);
+    }
+    for (int i = 0; i < 8; i++) {
+        if (i >= subs_count) break;
+        vec4 g = read_gaussian(1, i);
+        amplitude -= gaussian(freq,
+            freq_min + g.r * freq_range,
+            g.g * freq_range,
+            g.b * ampl_max);
+    }
+
+    // uv.y=0 is top, uv.y=1 is bottom — fill upward from the bottom
+    float norm   = clamp(amplitude / ampl_max, 0.0, 1.0);
+    float filled = step(1.0 - norm, uv.y);
+
+    vec3 fill_color = vec3(0.2, 0.8, 0.4);
+    vec3 bg_color   = vec3(0.05, 0.05, 0.1);
+    gl_FragColor = vec4(mix(bg_color, fill_color, filled), 1.0);
+}
