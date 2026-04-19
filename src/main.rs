@@ -19,16 +19,16 @@ async fn main() {
     let signal = dasp_test::create_signal(sample_rate);
     let _stream = cpal_test::init_stream(signal).expect("Failed to start audio");
 
-    let mut renderer = SpectrumRenderer::new(20.0, 4000.0, 1.2).await;
+    let mut renderer = SpectrumRenderer::new(400.0, 750.0, 1.2).await;
 
     let test_spectrum = Spectrum {
-        base: 0.1,
+        base: 1.,
         adds: vec![
-            GaussianDist { mean: 440.0,  sdev: 80.0,  ampl: 0.8 },
-            GaussianDist { mean: 1200.0, sdev: 200.0, ampl: 0.5 },
         ],
         subs: vec![
-            GaussianDist { mean: 800.0, sdev: 60.0, ampl: 0.3 },
+            GaussianDist { mean: 470.0, sdev: 5.0, ampl: 0.9 },  // blue peak
+            GaussianDist { mean: 620.0, sdev: 3.0, ampl: 0.7 },  // red-orange peak
+            GaussianDist { mean: 530.0, sdev: 1.0, ampl: 0.3 },  // notch in green
         ],
     };
     renderer.update(&test_spectrum);

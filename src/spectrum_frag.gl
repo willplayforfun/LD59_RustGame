@@ -26,15 +26,52 @@ float gaussian(float x, float mean, float sdev, float ampl) {
     return ampl * exp(-0.5 * d * d);
 }
 
+// Maps a wavelength in nanometers to a fully-saturated RGB colour.
+// Outside 400–750 nm returns a representative out-of-gamut tint so the
+// caller can still scale it by amplitude.
+vec3 wavelength_to_rgb(float wl) {
+    if (wl < 400.0) {
+        return vec3(0.35, 0.0, 0.55);   // deep purple — UV
+    }
+    if (wl > 750.0) {
+        return vec3(0.50, 0.0, 0.0);    // deep dark red — IR
+    }
+
+    float r = 0.0;
+    float g = 0.0;
+    float b = 0.0;
+
+    if (wl < 440.0) {           // violet → blue
+        r = (440.0 - wl) / 40.0;
+        b = 1.0;
+    } else if (wl < 490.0) {    // blue → cyan
+        g = (wl - 440.0) / 50.0;
+        b = 1.0;
+    } else if (wl < 510.0) {    // cyan → green
+        g = 1.0;
+        b = (510.0 - wl) / 20.0;
+    } else if (wl < 580.0) {    // green → yellow
+        r = (wl - 510.0) / 70.0;
+        g = 1.0;
+    } else if (wl < 645.0) {    // yellow → red
+        r = 1.0;
+        g = (645.0 - wl) / 65.0;
+    } else {                    // red
+        r = 1.0;
+    }
+
+    return vec3(r, g, b);
+}
+
 void main() {
-    float freq      = mix(freq_min, freq_max, uv.x);
+    float wl         = mix(freq_min, freq_max, uv.x);
     float freq_range = freq_max - freq_min;
-    float amplitude = base;
+    float amplitude  = base;
 
     for (int i = 0; i < 8; i++) {
         if (i >= adds_count) break;
         vec4 g = read_gaussian(0, i);
-        amplitude += gaussian(freq,
+        amplitude += gaussian(wl,
             freq_min + g.r * freq_range,
             g.g * freq_range,
             g.b * ampl_max);
@@ -42,17 +79,13 @@ void main() {
     for (int i = 0; i < 8; i++) {
         if (i >= subs_count) break;
         vec4 g = read_gaussian(1, i);
-        amplitude -= gaussian(freq,
+        amplitude -= gaussian(wl,
             freq_min + g.r * freq_range,
             g.g * freq_range,
             g.b * ampl_max);
     }
 
-    // uv.y=0 is top, uv.y=1 is bottom — fill upward from the bottom
-    float norm   = clamp(amplitude / ampl_max, 0.0, 1.0);
-    float filled = step(1.0 - norm, uv.y);
-
-    vec3 fill_color = vec3(0.2, 0.8, 0.4);
-    vec3 bg_color   = vec3(0.05, 0.05, 0.1);
-    gl_FragColor = vec4(mix(bg_color, fill_color, filled), 1.0);
+    // Amplitude 0 → black, amplitude ampl_max → full wavelength colour.
+    float norm = clamp(amplitude / ampl_max, 0.0, 1.0);
+    gl_FragColor = vec4(wavelength_to_rgb(wl) * norm, 1.0);
 }
