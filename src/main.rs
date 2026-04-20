@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use macroquad::ui::{root_ui, Skin};
 
 mod cpal_test;
 mod dasp_test;
@@ -10,7 +11,7 @@ mod star_rendering;
 mod world;
 mod scenes;
 
-use scenes::{GameScene, InitialFadeIn};
+use scenes::{GameScene, InitialFadeIn, StarAnalysis};
 use star_rendering::{gaussian_psf, generate_starfield};
 use world::World;
 
@@ -29,10 +30,47 @@ impl GameState {
         let pixels   = generate_starfield(w, h, 2.0, &psf, seed);
         let starfield = Texture2D::from_rgba8(w as u16, h as u16, &pixels);
 
+        let ui_skin = {
+            let default = root_ui().default_skin();
+
+            let label_style = root_ui()
+                .style_builder()
+                .margin(RectOffset::new(0.0, 0.0, 2.0, 2.0))
+                .build();
+
+            // Rebuild window styles with color_inactive matching the active colour,
+            // disabling the dimming effect when the window loses focus.
+            // Active colours sourced from macroquad's default skin (style.rs).
+            let window_style = root_ui()
+                .style_builder()
+                .background(Image {
+                    width: 3, height: 3,
+                    bytes: vec![
+                        68,68,68,255,  68,68,68,255,  68,68,68,255,
+                        68,68,68,255,  238,238,238,255, 68,68,68,255,
+                        68,68,68,255,  68,68,68,255,  68,68,68,255,
+                    ],
+                })
+                .background_margin(RectOffset::new(1., 1., 1., 1.))
+                .color_inactive(Color::from_rgba(238, 238, 238, 255))
+                .text_color(Color::from_rgba(0, 0, 0, 255))
+                .build();
+
+            let window_titlebar_style = root_ui()
+                .style_builder()
+                .color(Color::from_rgba(68, 68, 68, 255))
+                .color_inactive(Color::from_rgba(68, 68, 68, 255))
+                .text_color(Color::from_rgba(0, 0, 0, 255))
+                .build();
+
+            Skin { label_style, window_style, window_titlebar_style, ..default }
+        };
+
         GameState {
             round: 1,
-            world: World { seed, starfield },
-            scene: GameScene::InitialFadeIn(InitialFadeIn::new()),
+            world: World { seed, starfield, ui_skin },
+            //scene: GameScene::InitialFadeIn(InitialFadeIn::new()),
+            scene: GameScene::StarAnalysis(StarAnalysis::new(0)),
         }
     }
 
