@@ -1,6 +1,7 @@
 use macroquad::prelude::*;
 use super::GameScene;
 use super::star_identify::StarIdentify;
+use crate::world::World;
 
 const FADE_DURATION: f32 = 2.0;
 
@@ -14,7 +15,7 @@ impl InitialFadeIn {
         InitialFadeIn { progress: 0.0 }
     }
 
-    pub fn update(self) -> GameScene {
+    pub fn update(self, _world: &World) -> GameScene {
         let p = self.progress + get_frame_time() / FADE_DURATION;
         if p >= 1.0 {
             GameScene::StarIdentify(StarIdentify::new(0))

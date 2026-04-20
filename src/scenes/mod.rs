@@ -6,7 +6,9 @@ pub use initial_fade_in::InitialFadeIn;
 pub use star_identify::StarIdentify;
 pub use star_analysis::StarAnalysis;
 
-#[derive(Copy, Clone)]
+use crate::world::World;
+
+#[derive(Clone)]
 pub enum GameScene {
     InitialFadeIn(InitialFadeIn),
     StarIdentify(StarIdentify),
@@ -14,11 +16,11 @@ pub enum GameScene {
 }
 
 impl GameScene {
-    pub fn update(self) -> GameScene {
+    pub fn update(self, world: &World) -> GameScene {
         match self {
-            GameScene::InitialFadeIn(s) => s.update(),
-            GameScene::StarIdentify(s)  => s.update(),
-            GameScene::StarAnalysis(s)  => s.update(),
+            GameScene::InitialFadeIn(s) => s.update(world),
+            GameScene::StarIdentify(s)  => s.update(world),
+            GameScene::StarAnalysis(s)  => s.update(world),
         }
     }
 

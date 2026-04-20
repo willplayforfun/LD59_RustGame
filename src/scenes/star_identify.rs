@@ -1,6 +1,7 @@
 use macroquad::prelude::*;
 use super::GameScene;
 use super::star_analysis::StarAnalysis;
+use crate::world::World;
 
 const IDENTIFY_DURATION: f32 = 3.0;
 
@@ -15,7 +16,7 @@ impl StarIdentify {
         StarIdentify { progress: 0.0, selected_star }
     }
 
-    pub fn update(self) -> GameScene {
+    pub fn update(self, _world: &World) -> GameScene {
         let p = self.progress + get_frame_time() / IDENTIFY_DURATION;
         if p >= 1.0 {
             GameScene::StarAnalysis(StarAnalysis::new(self.selected_star))

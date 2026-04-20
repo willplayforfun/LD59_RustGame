@@ -1,5 +1,6 @@
 use macroquad::prelude::*;
 use super::GameScene;
+use crate::world::World;
 
 const INTRO_DURATION: f32 = 1.0;
 
@@ -14,7 +15,7 @@ impl StarAnalysis {
         StarAnalysis { intro_progress: 0.0, selected_star }
     }
 
-    pub fn update(self) -> GameScene {
+    pub fn update(self, _world: &World) -> GameScene {
         let p = (self.intro_progress + get_frame_time() / INTRO_DURATION).min(1.0);
         GameScene::StarAnalysis(StarAnalysis { intro_progress: p, ..self })
     }
