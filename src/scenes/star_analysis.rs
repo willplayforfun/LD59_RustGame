@@ -1,6 +1,7 @@
 use macroquad::prelude::*;
 use macroquad::ui::{hash, root_ui, widgets::{self, Button, Group}, Id, Ui};
 use super::GameScene;
+use super::initial_fade_in::InitialFadeIn;
 use crate::world::World;
 use crate::star::{Planet, StarData, generate_star_data};
 use crate::star_rendering::generate_star;
@@ -10,10 +11,8 @@ const INTRO_DURATION: f32 = 1.0;
 
 // ── Graph constants ───────────────────────────────────────────────────────────
 
-/// How many seconds of history each graph displays.
 const GRAPH_WINDOW_SECS: f32 = 40.0;
 
-/// Y-axis ranges per graph — tweak to taste.
 const BRIGHTNESS_Y_MIN: f32 =  200.0;
 const BRIGHTNESS_Y_MAX: f32 =  600.0;
 const REDSHIFT_Y_MIN:   f32 = -150.0;
@@ -21,20 +20,34 @@ const REDSHIFT_Y_MAX:   f32 =  150.0;
 const POSITION_Y_MIN:   f32 = -200.0;
 const POSITION_Y_MAX:   f32 =  200.0;
 
-/// Side length of the star texture in pixels (must be odd).
-const STAR_TEX_PX: usize = 15;
-/// Display scale applied to the star texture when drawing it.
-const STAR_DISPLAY_SCALE: f32 = 16.0;
+const STAR_TEX_PX:       usize = 15;
+const STAR_DISPLAY_SCALE: f32  = 16.0;
+
+// ── Confirm sequence constants ────────────────────────────────────────────────
+
+const ANIM_DURATION: f32 = 0.6;
+const HOLD_DURATION: f32 = 1.5;
+const EXIT_DURATION: f32 = 0.5;
+
+/// Log-ratio tolerance for mass and period matching (≈ ±10%).
+const LOG_TOL: f32 = 0.10;
+/// Absolute tolerance for eccentricity matching.
+const ECC_TOL: f32 = 0.05;
+
+#[derive(Clone, PartialEq)]
+enum ConfirmPhase { Idle, Animating, Holding, Exiting }
 
 #[derive(Clone)]
 pub struct StarAnalysis {
-    pub intro_progress: f32,
-    pub selected_star:  usize,
-    pub planet_guesses: Vec<Planet>,
-    /// The true planetary system for this star (hidden from the player).
-    pub star_data:      StarData,
-    /// Seconds elapsed since the scene started.  Drives the simulation.
-    pub scene_time:     f32,
+    pub intro_progress:   f32,
+    pub selected_star:    usize,
+    pub planet_guesses:   Vec<Planet>,
+    pub star_data:        StarData,
+    pub scene_time:       f32,
+    pub round:            u8,
+    confirm_phase:        ConfirmPhase,
+    confirm_elapsed:      f32,
+    confirm_results:      Vec<bool>,
 }
 
 impl StarAnalysis {
@@ -47,6 +60,10 @@ impl StarAnalysis {
             planet_guesses: Vec::new(),
             star_data,
             scene_time: 0.0,
+            round,
+            confirm_phase:   ConfirmPhase::Idle,
+            confirm_elapsed: 0.0,
+            confirm_results: Vec::new(),
         }
     }
 
@@ -54,8 +71,34 @@ impl StarAnalysis {
         self.intro_progress = (self.intro_progress + get_frame_time() / INTRO_DURATION).min(1.0);
         self.scene_time += get_frame_time();
 
-        // Keep the star texture in sync with the real planetary system.
         refresh_star_texture(&self.star_data, self.scene_time, world);
+
+        // ── Confirm sequence state machine ────────────────────────────────────
+        match self.confirm_phase {
+            ConfirmPhase::Animating => {
+                self.confirm_elapsed += get_frame_time();
+                if self.confirm_elapsed >= ANIM_DURATION {
+                    self.confirm_phase   = ConfirmPhase::Holding;
+                    self.confirm_elapsed = 0.0;
+                }
+            }
+            ConfirmPhase::Holding => {
+                self.confirm_elapsed += get_frame_time();
+                if self.confirm_elapsed >= HOLD_DURATION {
+                    self.confirm_phase   = ConfirmPhase::Exiting;
+                    self.confirm_elapsed = 0.0;
+                }
+            }
+            ConfirmPhase::Exiting => {
+                self.confirm_elapsed += get_frame_time();
+                if self.confirm_elapsed >= EXIT_DURATION {
+                    let new_round = self.round.saturating_add(1);
+                    let new_star  = pick_star(world.seed, new_round);
+                    return GameScene::InitialFadeIn(InitialFadeIn::new(new_round, new_star));
+                }
+            }
+            ConfirmPhase::Idle => {}
+        }
 
         // ── Right panel: planet parameter editor ──────────────────────────────
         let panel_x = screen_width() * 2.0 / 3.0;
@@ -63,13 +106,11 @@ impl StarAnalysis {
         let group_w = panel_w - 26.0;
         let mut add_planet = false;
 
-        // Label margin set in World::ui_skin; LABEL_H must match: font_size + 2 * margin.
-        // Default macroquad font size is 13px; margin is 2.0 → LABEL_H = 13 + 4 = 17.
         const LABEL_H:   f32 = 17.0;
         const BTN_ROW_H: f32 = 28.0;
         const SLIDER_H:  f32 = 20.0;
         const PARAM_H:   f32 = LABEL_H + BTN_ROW_H + SLIDER_H;
-        const PLANET_H:  f32 = LABEL_H + PARAM_H * 3.0; // title label + 3 params
+        const PLANET_H:  f32 = LABEL_H + PARAM_H * 3.0;
 
         const ADD_WIN_H: f32 = 50.0;
         const ADD_BTN_H: f32 = 36.0;
@@ -103,10 +144,37 @@ impl StarAnalysis {
                 }
             });
 
+        // ── Confirm Planets button (left side, below star image) ──────────────
+        let display_px  = STAR_TEX_PX as f32 * STAR_DISPLAY_SCALE;
+        let star_bot_y  = screen_height() * 0.35 + display_px / 2.0;
+        let conf_btn_w  = 160.0;
+        let conf_btn_h  = 36.0;
+        let conf_win_h  = conf_btn_h + 10.0;
+        let conf_win_x  = screen_width() / 6.0 - conf_btn_w / 2.0;
+        let conf_win_y  = star_bot_y + 16.0;
+
+        let mut confirm_clicked = false;
+        if self.confirm_phase == ConfirmPhase::Idle {
+            widgets::Window::new(3u64, vec2(conf_win_x, conf_win_y), vec2(conf_btn_w, conf_win_h))
+                .titlebar(false)
+                .movable(false)
+                .ui(&mut *root_ui(), |ui| {
+                    if Button::new("Confirm Planets").size(Vec2::new(conf_btn_w - 10.0, conf_btn_h)).ui(ui) {
+                        confirm_clicked = true;
+                    }
+                });
+        }
+
         root_ui().pop_skin();
 
         if add_planet {
             self.planet_guesses.push(Planet { mass: 1.0, period: 10.0, eccentricity: 0.0, direction: (1.0, 0.0) });
+        }
+
+        if confirm_clicked {
+            self.confirm_results = match_planets(&self.planet_guesses, &self.star_data.planets);
+            self.confirm_phase   = ConfirmPhase::Animating;
+            self.confirm_elapsed = 0.0;
         }
 
         GameScene::StarAnalysis(self)
@@ -118,7 +186,6 @@ impl StarAnalysis {
         let star_x = screen_width() * (1.0 / 6.0) - display_px / 2.0;
         let star_y = screen_height() * 0.35 - display_px / 2.0;
 
-        // Black backing so the transparent star halo reads cleanly.
         draw_rectangle(star_x, star_y, display_px, display_px, BLACK);
         draw_texture_ex(
             &world.star_tex,
@@ -130,14 +197,105 @@ impl StarAnalysis {
             },
         );
 
+        // ── Confirm result overlays ────────────────────────────────────────────
+        let result_alpha = match self.confirm_phase {
+            ConfirmPhase::Idle       => 0.0,
+            ConfirmPhase::Animating  => (self.confirm_elapsed / ANIM_DURATION).clamp(0.0, 1.0),
+            ConfirmPhase::Holding    => 1.0,
+            ConfirmPhase::Exiting    => 1.0 - (self.confirm_elapsed / EXIT_DURATION).clamp(0.0, 1.0),
+        };
+        if result_alpha > 0.0 {
+            draw_confirm_results(&self.confirm_results, result_alpha);
+        }
+
         // ── Graphs (centre third) ──────────────────────────────────────────────
         draw_graphs(&self.star_data.planets, &self.planet_guesses, self.scene_time);
     }
 }
 
+// ─── Planet matching ──────────────────────────────────────────────────────────
+
+fn match_planets(guesses: &[Planet], real: &[Planet]) -> Vec<bool> {
+    let mut matched = vec![false; real.len()];
+    let mut results = vec![false; guesses.len()];
+    for (gi, guess) in guesses.iter().enumerate() {
+        for (ri, truth) in real.iter().enumerate() {
+            if !matched[ri] && planet_ok(guess, truth) {
+                results[gi] = true;
+                matched[ri] = true;
+                break;
+            }
+        }
+    }
+    results
+}
+
+fn planet_ok(guess: &Planet, truth: &Planet) -> bool {
+    log_ok(guess.mass,         truth.mass,         LOG_TOL)
+        && log_ok(guess.period,      truth.period,      LOG_TOL)
+        && abs_ok(guess.eccentricity, truth.eccentricity, ECC_TOL)
+}
+
+/// Within `tol` in fractional log-ratio space: |ln(a/b)| ≤ tol.
+fn log_ok(a: f32, b: f32, tol: f32) -> bool {
+    if a <= 0.0 || b <= 0.0 { return false; }
+    (a / b).ln().abs() <= tol
+}
+
+fn abs_ok(a: f32, b: f32, tol: f32) -> bool {
+    (a - b).abs() <= tol
+}
+
+fn pick_star(seed: u64, round: u8) -> usize {
+    let h = seed.wrapping_add((round as u64).wrapping_mul(0x9e3779b97f4a7c15));
+    (h >> 32) as usize
+}
+
+// ─── Confirm result drawing ───────────────────────────────────────────────────
+
+fn draw_confirm_results(results: &[bool], alpha: f32) {
+    if results.is_empty() { return; }
+
+    let cx      = screen_width() / 6.0;
+    let start_y = screen_height() * 0.62;
+    let spacing = (screen_height() * 0.34 / results.len().max(1) as f32).min(90.0);
+    let icon_r  = 28.0;
+
+    for (i, &ok) in results.iter().enumerate() {
+        let cy = start_y + i as f32 * spacing;
+
+        let bg_col  = if ok { Color::new(0.0, 0.75, 0.2, alpha * 0.25) }
+                      else  { Color::new(0.9, 0.1,  0.1, alpha * 0.25) };
+        let sym_col = if ok { Color::new(0.15, 1.0, 0.3, alpha) }
+                      else  { Color::new(1.0,  0.2, 0.2, alpha) };
+
+        draw_circle(cx, cy, icon_r, bg_col);
+
+        if ok { draw_check(cx, cy, icon_r * 0.70, sym_col); }
+        else  { draw_cross(cx, cy, icon_r * 0.55, sym_col); }
+
+        let lbl  = format!("P{}", i + 1);
+        let dims = measure_text(&lbl, None, 14, 1.0);
+        draw_text(&lbl, cx - dims.width / 2.0, cy + icon_r + 14.0, 14.0,
+                  Color::new(0.85, 0.85, 0.85, alpha));
+    }
+}
+
+fn draw_check(cx: f32, cy: f32, size: f32, col: Color) {
+    let w = 3.5;
+    // short down-left arm, long up-right arm
+    draw_line(cx - size * 0.5, cy,           cx - size * 0.1, cy + size * 0.45, w, col);
+    draw_line(cx - size * 0.1, cy + size * 0.45, cx + size * 0.55, cy - size * 0.45, w, col);
+}
+
+fn draw_cross(cx: f32, cy: f32, size: f32, col: Color) {
+    let w = 3.5;
+    draw_line(cx - size, cy - size, cx + size, cy + size, w, col);
+    draw_line(cx + size, cy - size, cx - size, cy + size, w, col);
+}
+
 // ─── Star texture refresh ─────────────────────────────────────────────────────
 
-/// Regenerates `world.star_tex` to reflect the star's position at time `t`.
 fn refresh_star_texture(star: &StarData, time: f32, world: &mut World) {
     let offset = star_pixel_offset(&star.planets, time, EDGE_ON);
     let pixels = generate_star(STAR_TEX_PX, star.temperature, star.brightness, &world.psf, offset);
@@ -210,11 +368,6 @@ fn slider_widget(ui: &mut Ui, id: Id, value: &mut f32, min: f32, max: f32, total
 
 // ─── Graph rendering ──────────────────────────────────────────────────────────
 
-/// Draws the three stacked scrolling graphs in the centre third of the screen.
-///
-/// `real`       — the true planetary system (white series).
-/// `guess`      — the player's current guess (red series).
-/// `scene_time` — current simulation time; the right edge of the graph.
 fn draw_graphs(real: &[Planet], guess: &[Planet], scene_time: f32) {
     let sw   = screen_width();
     let sh   = screen_height();
@@ -222,10 +375,8 @@ fn draw_graphs(real: &[Planet], guess: &[Planet], scene_time: f32) {
     let gw   = sw / 3.0;
     let gh   = sh / 3.0;
     let pad  = 8.0;
-    let lbl  = 16.0; // vertical space reserved for the label at the top
+    let lbl  = 16.0;
 
-    // Each entry: (label, y_min, y_max, which observable to plot)
-    // Observable selector is an index:  0 = brightness, 1 = redshift, 2 = position.x
     let graphs = [
         ("Brightness", BRIGHTNESS_Y_MIN, BRIGHTNESS_Y_MAX, 0usize),
         ("Redshift",   REDSHIFT_Y_MIN,   REDSHIFT_Y_MAX,   1),
@@ -235,37 +386,28 @@ fn draw_graphs(real: &[Planet], guess: &[Planet], scene_time: f32) {
     for (i, (label, y_min, y_max, obs_idx)) in graphs.iter().enumerate() {
         let panel_y = i as f32 * gh;
 
-        // Panel background and border
         draw_rectangle(gx, panel_y, gw, gh, Color::from_rgba(18, 18, 28, 220));
         draw_line(gx, panel_y, gx, panel_y + gh, 1.0, Color::from_rgba(70, 70, 90, 255));
         if i < 2 {
             draw_line(gx, panel_y + gh, gx + gw, panel_y + gh, 1.0, Color::from_rgba(70, 70, 90, 255));
         }
 
-        // Label
         draw_text(label, gx + pad, panel_y + lbl, 14.0, Color::from_rgba(160, 160, 180, 255));
 
-        // Inner plotting area
         let ix = gx + pad;
         let iy = panel_y + lbl + 4.0;
         let iw = gw - pad * 2.0;
         let ih = gh - lbl - pad - 4.0;
 
-        // Zero / baseline reference line
         let zero_frac = (0.0_f32 - y_min) / (y_max - y_min);
         let zero_y    = iy + (1.0 - zero_frac.clamp(0.0, 1.0)) * ih;
         draw_line(ix, zero_y, ix + iw, zero_y, 1.0, Color::from_rgba(50, 50, 70, 255));
 
-        // Data series
         draw_graph_series(real,  scene_time, ix, iy, iw, ih, *y_min, *y_max, *obs_idx, WHITE);
         draw_graph_series(guess, scene_time, ix, iy, iw, ih, *y_min, *y_max, *obs_idx, Color::from_rgba(220, 60, 60, 255));
     }
 }
 
-/// Draws one data series (polyline) for a single graph panel.
-///
-/// Samples `predict_observations` at one point per pixel column across the
-/// time window `[scene_time - GRAPH_WINDOW_SECS, scene_time]`.
 fn draw_graph_series(
     planets:    &[Planet],
     scene_time: f32,
