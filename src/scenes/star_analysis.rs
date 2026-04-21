@@ -92,7 +92,7 @@ impl StarAnalysis {
                 self.confirm_elapsed += get_frame_time();
                 if self.confirm_elapsed >= EXIT_DURATION {
                     let new_round = self.round.saturating_add(1);
-                    let new_star  = pick_star(world.seed, new_round);
+                    let new_star  = pick_star(world.seed, new_round, world.star_count);
                     return GameScene::InitialFadeIn(InitialFadeIn::new_returning(new_round, new_star));
                 }
             }
@@ -306,9 +306,10 @@ fn abs_ok(a: f32, b: f32, tol: f32) -> bool {
     (a - b).abs() <= tol
 }
 
-fn pick_star(seed: u64, round: u8) -> usize {
+fn pick_star(seed: u64, round: u8, star_count: usize) -> usize {
+    if star_count == 0 { return 0; }
     let h = seed.wrapping_add((round as u64).wrapping_mul(0x9e3779b97f4a7c15));
-    (h >> 32) as usize
+    (h >> 32) as usize % star_count
 }
 
 // ─── Confirm result drawing ───────────────────────────────────────────────────

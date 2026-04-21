@@ -28,8 +28,8 @@ impl GameState {
     async fn init() -> Self {
         let seed = (get_time() * 1_000_000.0) as u64;
         let psf  = gaussian_psf(9, 2.0);
-        let w    = screen_width()  as usize;
-        let h    = screen_height() as usize;
+        let w    = (screen_width()  as usize).max(1);
+        let h    = (screen_height() as usize).max(1);
         let pixels   = generate_starfield(w, h, 2.0, &psf, seed);
         let starfield = Texture2D::from_rgba8(w as u16, h as u16, &pixels);
 
