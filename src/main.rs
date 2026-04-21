@@ -108,7 +108,26 @@ impl GameState {
         (h >> 32) as usize % star_count
     }
 
+    /// Regenerates the starfield texture if the window has been resized since
+    /// the last bake, keeping star positions consistent with the new pixel grid.
+    fn handle_resize(&mut self) {
+        let w = screen_width()  as usize;
+        let h = screen_height() as usize;
+        if w == self.world.starfield.width()  as usize
+        && h == self.world.starfield.height() as usize {
+            return;
+        }
+        let pixels = generate_starfield(w, h, 2.0, &self.world.psf, self.world.seed);
+        self.world.starfield = Texture2D::from_rgba8(w as u16, h as u16, &pixels);
+        self.world.star_count = starfield_star_count(w, h, 2.0);
+        // Re-bound in case star_count decreased.
+        if self.selected_star >= self.world.star_count {
+            self.selected_star = Self::pick_star(self.world.seed, self.round, self.world.star_count);
+        }
+    }
+
     fn update(mut self) -> Self {
+        self.handle_resize();
         let scene = self.scene.update(&mut self.world);
         GameState { scene, ..self }
     }
