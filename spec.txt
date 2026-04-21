@@ -1,0 +1,93 @@
+Main menu:
+Black starfield. 
+Title slides in from the top, centered: Survey
+As it's sliding in, an image of a blue planet slides in from the bottom, 
+along with the starfield, like we're panning the camera down to see it.
+The planet rises about halfway up from the bottom (centered).
+Options appear one by one in the middle of the screen (scaling up vertically from nowhere):
+- Continue Run (only shows if a run was previously in progress)
+- Daily Run
+- Start Random Run
+- Start Seeded Run
+- Settings
+A small X button in a triangle at the top right corner 
+(or left corner, depending on the platform - no X button on web).
+
+Clicking the seeded run option swaps to a minimal UI where the player can enter a seed value in a textbox,
+or select from the 5 most recent seeds (listed below in a vertical stack, perhaps getting slightly darker/more transparent 
+to indicate age, and also with "(daily)" next to it if it was a daily).
+Then there are two buttons, Start and Go Back.
+
+On future launches of the game, the intro animation is skipped or sped up.
+
+A small trophy icon next to "Random Run" is a button that swaps the screen to a view of all the player's runs.
+Each run is a row, with 6 circles. Each circle represents one survey round. Dotted means unreached. White rim
+means the star was reached. Then inside is a pie chart of how many planets were successfully identified, vs
+how many they got wrong. Little Xs below each circle count the number of errors. The survey round they failed on
+has a skull overlaid on the circle.
+Each run also shows the seed to the left, and potentially the date and the time taken, and the difficulty
+(if difficulty is added as a feature).
+Clicking on the seed prompts the player via a modal popup whether they want to start a seeded run.
+
+The UI can be navigated by gamepad joystick, or by using the mouse.
+
+If a new run is started while an existing one is saved, the user is prompted by a modal whether they want to 
+abort the existing run.  
+
+Game Start:
+
+After starting a run. Note that a run can be exited at any time and picked back up in the same spot.
+
+Initial Fade In:
+- Black screen fade into starfield. 
+Round Number Animation:
+- Text types out: Survey 1
+- Text fades away
+Star Identify:
+- A box starts screen edge and narrows in to identify one star. This is an oldschool-looking animation; the chunky box narrows in to surround one star, then blinks to confirm the lock-in.
+Star Analysis 1:
+- Identifying elements in the star
+- Identifying the distance/mass/luminosity of the star
+Planet Analysis 1:
+- A window opens (animation TBD, probably Y scale = 0 to start, scale up to 1, so it emerges from the center of the screen) containing an image of the star on the left, and three graphs in the middle: brightness over time, red shift over time, and relative position over time.
+- To the right is a UI where the player can add planets and adjust their mass, orbit eccentricity, and orbit period with sliders? and there are also buttons to move in big and small increments.
+- A second line on each graph, in red rather than black, shows the predicted values given the planets that are plugged in.
+- If the player presses a UI button at the bottom of the screen, any planet that is close enough to the real values of one of the planets is accepted with a green check. Invalid ones are crossed out with a red X. Same sort of chunky oldschool animation with basic flashing up the X or check.
+Planet Analysis 2:
+- The player is then presented with a second window. There is a view of the planets in a horizontal line, 
+with the star rendered as a very linear block of pixels on the left to indicate it's massive scale.
+Planets are presented more or less in their relative sizes and positioned evenly based on their order from the star.
+Each planet has either a fairly transparent dotted or more opaque solid circle around it depending on whether
+the player has locked it in or not.
+- For each planet the player got correct, they can select it (it then gets a marquee around it), and
+the UI populates. The player is presented with spectral analysis chart for the planet, 
+and they have to select from a list of elements on the right. For each element they also choose the abundance via a small slider.
+This changes a second spectral analysis chart, which is the predicted one. It is stacked below the real one.
+They can lock in using a button below the two charts. Once a planet is locked in they can still change the values.
+- Once all planets are locked in, a button appears to the right of all the planets, "Launch Probes".
+When they press that button, checkmarks appear over all the planets they got close enough, and Xes over the ones
+they failed at.
+- When a planet is selected, the player sees an enlarged version of it on the left, just like they saw 
+an enlarged version of the star. This is procedurally generated.
+
+At the very top of the screen, 6 dots are always visible, showing the progress through the run. 
+Xs are visible below the dots, showing how many errors have been accumulated. They are only added after confirming
+the planets for a survey round, so the player doesn't know if they screwed up the planets or the star or what.
+
+Pause Menu:
+
+Pressing escape during a run sends the player back to the main menu (with a very quick fade to black and fade in).
+This is the same as pressing the button at the corner of the window (top left or top right) which is a little back arrow
+while in gameplay.
+
+Notes:
+
+- All buttons should have a tooltip that appears near it when hovered.
+- All text should be localizable.
+- Everything should be easily playable with a gamepad.
+
+Achievements:
+- Win a Random Run
+- Win a Seeded Run
+- Win a Daily Run
+- Win a run with no errors
