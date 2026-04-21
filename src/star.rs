@@ -43,15 +43,24 @@ pub struct StarData {
 }
 
 /// Generates all properties for star `index` deterministically from
-/// `global_seed`.
-pub fn generate_star_data(global_seed: u64, index: usize) -> StarData {
+/// `global_seed`.  `difficulty` (1–6) controls how many planets may appear:
+/// low difficulties almost always yield 1; high difficulties can yield 2–3.
+pub fn generate_star_data(global_seed: u64, index: usize, difficulty: u8) -> StarData {
     let mut rng = Rng::new(star_seed(global_seed, index));
 
     let position    = (rng.next_f32(), rng.next_f32());
     let temperature = rng.range_f32(3_000.0, 20_000.0);
     let brightness  = f32::exp(rng.range_f32(-2.0, 1.5));
 
-    let planet_count = rng.next_u64() as usize % 3;
+    // Roll determines how many *extra* planets beyond the guaranteed 1.
+    // Thresholds (out of 100): [p(+0), p(+0 or +1)] — anything above → +2.
+    let roll = rng.next_u64() % 100;
+    let extra = match difficulty {
+        1 | 2         => if roll < 93 { 0 } else { 1 },
+        3 | 4         => if roll < 50 { 0 } else { 1 },
+        _ /* 5–6+ */ => if roll < 20 { 0 } else if roll < 75 { 1 } else { 2 },
+    };
+    let planet_count = 1 + extra;
     let planets = (0..planet_count)
         .map(|_| {
             let angle = rng.next_f32() * std::f32::consts::TAU;
@@ -59,7 +68,7 @@ pub fn generate_star_data(global_seed: u64, index: usize) -> StarData {
                 mass:         rng.range_f32(0.3, 5.0),
                 period:       rng.range_f32(5.0, 40.0),
                 eccentricity: rng.range_f32(0.0, 0.7),
-                direction:    (angle.cos(), angle.sin()),
+                direction:    (1.0, 0.0)//(angle.cos(), angle.sin()),
             }
         })
         .collect();
@@ -117,8 +126,8 @@ mod tests {
 
     #[test]
     fn generate_star_data_is_deterministic() {
-        let a = generate_star_data(99, 5);
-        let b = generate_star_data(99, 5);
+        let a = generate_star_data(99, 5, 3);
+        let b = generate_star_data(99, 5, 3);
         assert_eq!(a.temperature, b.temperature);
         assert_eq!(a.position,    b.position);
         assert_eq!(a.planets.len(), b.planets.len());
@@ -126,22 +135,31 @@ mod tests {
 
     #[test]
     fn generate_star_data_differs_by_index() {
-        let a = generate_star_data(99, 0);
-        let b = generate_star_data(99, 1);
+        let a = generate_star_data(99, 0, 3);
+        let b = generate_star_data(99, 1, 3);
         assert_ne!(a.temperature, b.temperature);
     }
 
     #[test]
-    fn planet_count_is_zero_one_or_two() {
-        for i in 0..50 {
-            assert!(generate_star_data(12345, i).planets.len() <= 2);
+    fn planet_count_low_difficulty() {
+        for i in 0..100 {
+            let n = generate_star_data(12345, i, 1).planets.len();
+            assert!(n >= 1 && n <= 2, "difficulty 1 yielded {n} planets");
+        }
+    }
+
+    #[test]
+    fn planet_count_high_difficulty() {
+        for i in 0..100 {
+            let n = generate_star_data(12345, i, 6).planets.len();
+            assert!(n >= 1 && n <= 3, "difficulty 6 yielded {n} planets");
         }
     }
 
     #[test]
     fn star_positions_are_normalised() {
         for i in 0..20 {
-            let d = generate_star_data(777, i);
+            let d = generate_star_data(777, i, 1);
             assert!((0.0..=1.0).contains(&d.position.0));
             assert!((0.0..=1.0).contains(&d.position.1));
         }

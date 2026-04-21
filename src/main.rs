@@ -17,9 +17,10 @@ use star_rendering::{gaussian_psf, generate_starfield};
 use world::World;
 
 struct GameState {
-    round: u16,
-    world: World,
-    scene: GameScene,
+    round:         u8,
+    selected_star: usize,
+    world:         World,
+    scene:         GameScene,
 }
 
 impl GameState {
@@ -77,9 +78,18 @@ impl GameState {
 
         let mut world = World { seed, starfield, ui_skin, psf, star_tex };
 
-        let scene = GameScene::InitialFadeIn(InitialFadeIn::new(1));
+        let round = 1;
+        let selected_star = Self::pick_star(seed, round);
+        let scene = GameScene::InitialFadeIn(InitialFadeIn::new(round, selected_star));
 
-        GameState { round: 1, world, scene }
+        GameState { round, selected_star, world, scene }
+    }
+
+    /// Deterministically picks a star index for the given round.
+    fn pick_star(seed: u64, round: u8) -> usize {
+        let h = seed
+            .wrapping_add((round as u64).wrapping_mul(0x9e3779b97f4a7c15));
+        (h >> 32) as usize
     }
 
     fn update(mut self) -> Self {

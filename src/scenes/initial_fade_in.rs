@@ -12,19 +12,20 @@ const FONT_SIZE: f32 = 60.0;
 
 #[derive(Copy, Clone)]
 pub struct InitialFadeIn {
-    pub round:   u16,
-    pub elapsed: f32,
+    pub round:         u8,
+    pub selected_star: usize,
+    pub elapsed:       f32,
 }
 
 impl InitialFadeIn {
-    pub fn new(round: u16) -> Self {
-        InitialFadeIn { round, elapsed: 0.0 }
+    pub fn new(round: u8, selected_star: usize) -> Self {
+        InitialFadeIn { round, selected_star, elapsed: 0.0 }
     }
 
     pub fn update(self, _world: &mut World) -> GameScene {
         let elapsed = self.elapsed + get_frame_time();
         if elapsed >= FADE_OUT_END {
-            GameScene::StarIdentify(StarIdentify::new(0))
+            GameScene::StarIdentify(StarIdentify::new(self.selected_star, self.round))
         } else {
             GameScene::InitialFadeIn(InitialFadeIn { elapsed, ..self })
         }

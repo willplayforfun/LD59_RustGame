@@ -38,8 +38,8 @@ pub struct StarAnalysis {
 }
 
 impl StarAnalysis {
-    pub fn new(selected_star: usize, world: &mut World) -> Self {
-        let star_data = generate_star_data(world.seed, selected_star);
+    pub fn new(selected_star: usize, world: &mut World, round: u8) -> Self {
+        let star_data = generate_star_data(world.seed, selected_star, round);
         refresh_star_texture(&star_data, 0.0, world);
         StarAnalysis {
             intro_progress: 0.0,

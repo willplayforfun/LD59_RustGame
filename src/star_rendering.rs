@@ -7,6 +7,7 @@
 //   4. generate_starfield()       — scatter many stars into a texture buffer
 
 use crate::rng::Rng;
+use crate::star::{generate_star_data, star_seed};
 
 // ─── PSF Kernel ──────────────────────────────────────────────────────────────
 
@@ -145,30 +146,34 @@ pub fn generate_starfield(
     psf: &PsfKernel,
     seed: u64,
 ) -> Vec<u8> {
+    // IMPORTANT: difficulty is fixed at 1 here — the starfield is purely visual
+    // and planet count does not affect star position, colour, or brightness.
+    const VISUAL_DIFFICULTY: u8 = 1;
+
     let star_count = ((width * height) as f32 * density / 10_000.0).round() as usize;
 
-    let mut rng   = Rng::new(seed);
     let mut r_buf = vec![0.0f32; width * height];
     let mut g_buf = vec![0.0f32; width * height];
     let mut b_buf = vec![0.0f32; width * height];
 
-    for _ in 0..star_count {
-        let cx = rng.next_f32() * width  as f32;
-        let cy = rng.next_f32() * height as f32;
+    for i in 0..star_count {
+        let data = generate_star_data(seed, i, VISUAL_DIFFICULTY);
+        let cx = data.position.0 * width  as f32;
+        let cy = data.position.1 * height as f32;
 
         let pixel_x = cx.round() as i32;
         let pixel_y = cy.round() as i32;
         let sub     = (cx - pixel_x as f32, cy - pixel_y as f32);
 
-        let kelvin     = rng.range_f32(3_000.0, 20_000.0);
-        let brightness = f32::exp(rng.range_f32(-2.0, 1.5));
-        let star_size  = random_star_size(&mut rng);
-        let half       = (star_size / 2) as i32;
+        // Use a separate per-star RNG for visual-only properties (star size).
+        let mut rng   = Rng::new(star_seed(seed, i).wrapping_add(0x5EED_5175));
+        let star_size = random_star_size(&mut rng);
+        let half      = (star_size / 2) as i32;
 
-        let mut lum = stamp_psf(star_size, brightness, psf, sub);
+        let mut lum = stamp_psf(star_size, data.brightness, psf, sub);
         bloom(&mut lum, star_size, 4);
 
-        let (sr, sg, sb) = color_temperature_to_rgb(kelvin);
+        let (sr, sg, sb) = color_temperature_to_rgb(data.temperature);
 
         for sy in 0..star_size {
             for sx in 0..star_size {
