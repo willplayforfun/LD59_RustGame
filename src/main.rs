@@ -8,10 +8,11 @@ mod spectral_lines;
 mod rng;
 mod star;
 mod star_rendering;
+mod simulation;
 mod world;
 mod scenes;
 
-use scenes::{GameScene, InitialFadeIn, StarAnalysis};
+use scenes::{GameScene, InitialFadeIn};
 use star_rendering::{gaussian_psf, generate_starfield};
 use world::World;
 
@@ -66,16 +67,23 @@ impl GameState {
             Skin { label_style, window_style, window_titlebar_style, ..default }
         };
 
-        GameState {
-            round: 1,
-            world: World { seed, starfield, ui_skin },
-            //scene: GameScene::InitialFadeIn(InitialFadeIn::new()),
-            scene: GameScene::StarAnalysis(StarAnalysis::new(0)),
-        }
+        // Placeholder star texture — overwritten immediately by StarAnalysis::new.
+        const STAR_TEX_PX: u16 = 15;
+        let star_tex = Texture2D::from_rgba8(
+            STAR_TEX_PX, STAR_TEX_PX,
+            &vec![0u8; (STAR_TEX_PX * STAR_TEX_PX * 4) as usize],
+        );
+        star_tex.set_filter(FilterMode::Nearest);
+
+        let mut world = World { seed, starfield, ui_skin, psf, star_tex };
+
+        let scene = GameScene::InitialFadeIn(InitialFadeIn::new(1));
+
+        GameState { round: 1, world, scene }
     }
 
-    fn update(self) -> Self {
-        let scene = self.scene.update(&self.world);
+    fn update(mut self) -> Self {
+        let scene = self.scene.update(&mut self.world);
         GameState { scene, ..self }
     }
 
@@ -90,7 +98,7 @@ impl GameState {
                 ..Default::default()
             },
         );
-        self.scene.draw();
+        self.scene.draw(&self.world);
     }
 }
 

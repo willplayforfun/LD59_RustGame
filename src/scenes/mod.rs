@@ -16,7 +16,7 @@ pub enum GameScene {
 }
 
 impl GameScene {
-    pub fn update(self, world: &World) -> GameScene {
+    pub fn update(self, world: &mut World) -> GameScene {
         match self {
             GameScene::InitialFadeIn(s) => s.update(world),
             GameScene::StarIdentify(s)  => s.update(world),
@@ -24,11 +24,11 @@ impl GameScene {
         }
     }
 
-    pub fn draw(&self) {
+    pub fn draw(&self, world: &World) {
         match self {
-            GameScene::InitialFadeIn(s) => s.draw(),
-            GameScene::StarIdentify(s)  => s.draw(),
-            GameScene::StarAnalysis(s)  => s.draw(),
+            GameScene::InitialFadeIn(s) => s.draw(world),
+            GameScene::StarIdentify(s)  => s.draw(world),
+            GameScene::StarAnalysis(s)  => s.draw(world),
         }
     }
 }

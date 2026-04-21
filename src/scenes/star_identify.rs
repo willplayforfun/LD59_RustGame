@@ -16,16 +16,16 @@ impl StarIdentify {
         StarIdentify { progress: 0.0, selected_star }
     }
 
-    pub fn update(self, _world: &World) -> GameScene {
+    pub fn update(self, world: &mut World) -> GameScene {
         let p = self.progress + get_frame_time() / IDENTIFY_DURATION;
         if p >= 1.0 {
-            GameScene::StarAnalysis(StarAnalysis::new(self.selected_star))
+            GameScene::StarAnalysis(StarAnalysis::new(self.selected_star, world))
         } else {
             GameScene::StarIdentify(StarIdentify { progress: p, ..self })
         }
     }
 
-    pub fn draw(&self) {
+    pub fn draw(&self, _world: &World) {
         // TODO: box starts at screen edge and narrows in to the selected star
     }
 }
