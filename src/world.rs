@@ -8,8 +8,9 @@ pub struct World {
     /// `selected_star` index must be less than this value.
     pub star_count: usize,
     pub starfield:  Texture2D,
-    pub ui_skin:         Skin,
-    pub ui_skin_heading: Skin,
+    pub ui_skin:          Skin,
+    pub ui_skin_heading:  Skin,
+    pub ui_skin_blue_btn: Skin,
     /// Shared optical PSF kernel — built once, used whenever a star texture
     /// needs to be (re)generated.
     pub psf:        PsfKernel,

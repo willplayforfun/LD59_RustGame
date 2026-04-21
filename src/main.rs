@@ -26,10 +26,7 @@ struct GameState {
 
 impl GameState {
     async fn init() -> Self {
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0xABCD_1234u64);
+        let seed = (get_time() * 1_000_000.0) as u64;
         let psf  = gaussian_psf(9, 2.0);
         let w    = screen_width()  as usize;
         let h    = screen_height() as usize;
@@ -84,6 +81,39 @@ impl GameState {
             Skin { label_style, ..default }
         };
 
+        let ui_skin_blue_btn = {
+            let default = root_ui().default_skin();
+            let button_style = root_ui()
+                .style_builder()
+                .background(Image {
+                    width: 3, height: 3,
+                    bytes: vec![
+                        30, 80, 160, 255,  30, 80, 160, 255,  30, 80, 160, 255,
+                        30, 80, 160, 255,  60, 130, 230, 255,  30, 80, 160, 255,
+                        30, 80, 160, 255,  30, 80, 160, 255,  30, 80, 160, 255,
+                    ],
+                })
+                .background_margin(RectOffset::new(1., 1., 1., 1.))
+                .color_inactive(Color::from_rgba(60, 130, 230, 255))
+                .text_color(Color::from_rgba(255, 255, 255, 255))
+                .build();
+            let window_style = root_ui()
+                .style_builder()
+                .background(Image {
+                    width: 3, height: 3,
+                    bytes: vec![
+                        68,68,68,255,  68,68,68,255,  68,68,68,255,
+                        68,68,68,255,  238,238,238,255, 68,68,68,255,
+                        68,68,68,255,  68,68,68,255,  68,68,68,255,
+                    ],
+                })
+                .background_margin(RectOffset::new(1., 1., 1., 1.))
+                .color_inactive(Color::from_rgba(238, 238, 238, 255))
+                .text_color(Color::from_rgba(0, 0, 0, 255))
+                .build();
+            Skin { button_style, window_style, ..default }
+        };
+
         // Placeholder star texture — overwritten immediately by StarAnalysis::new.
         const STAR_TEX_PX: u16 = 15;
         let star_tex = Texture2D::from_rgba8(
@@ -93,7 +123,7 @@ impl GameState {
         star_tex.set_filter(FilterMode::Nearest);
 
         let star_count = starfield_star_count(w, h, 2.0);
-        let world = World { seed, star_count, starfield, ui_skin, ui_skin_heading, psf, star_tex };
+        let world = World { seed, star_count, starfield, ui_skin, ui_skin_heading, ui_skin_blue_btn, psf, star_tex };
 
         let round = 1;
         let selected_star = Self::pick_star(seed, round, world.star_count);
@@ -104,6 +134,7 @@ impl GameState {
 
     /// Deterministically picks a star index in `0..star_count` for the given round.
     fn pick_star(seed: u64, round: u8, star_count: usize) -> usize {
+        if star_count == 0 { return 0; }
         let h = seed
             .wrapping_add((round as u64).wrapping_mul(0x9e3779b97f4a7c15));
         (h >> 32) as usize % star_count
