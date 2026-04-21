@@ -34,7 +34,7 @@ const EXIT_DURATION: f32 = 0.5;
 /// Log-ratio tolerance for mass and period matching
 const LOG_TOL: f32 = 0.20;
 /// Absolute tolerance for eccentricity matching.
-const ECC_TOL: f32 = 0.12;
+const ECC_TOL: f32 = 0.2;
 
 #[derive(Clone, PartialEq)]
 enum ConfirmPhase { Idle, Animating, Holding, Exiting }
