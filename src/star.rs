@@ -19,14 +19,9 @@ pub const ECC_STEP:    f32 = 0.01;
 // ─── Procedural star data ─────────────────────────────────────────────────────
 
 /// Derives an independent seed for star `index` from the global world seed.
-///
-/// Uses a hash (Weyl sequence + SplitMix64 avalanche) so star N can be
-/// generated without first generating stars 0..N-1.
+/// Wraps `rng::hash` — see there for algorithm details.
 pub fn star_seed(global_seed: u64, index: usize) -> u64 {
-    let mut x = global_seed.wrapping_add((index as u64).wrapping_mul(0x9e3779b97f4a7c15));
-    x = (x ^ (x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
-    x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
-    x ^ (x >> 31)
+    crate::rng::hash(global_seed, index as u64)
 }
 
 /// A planet orbiting a star, described in the parameters the player will try

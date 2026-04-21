@@ -135,9 +135,7 @@ impl GameState {
     /// Deterministically picks a star index in `0..star_count` for the given round.
     fn pick_star(seed: u64, round: u8, star_count: usize) -> usize {
         if star_count == 0 { return 0; }
-        let h = seed
-            .wrapping_add((round as u64).wrapping_mul(0x9e3779b97f4a7c15));
-        (h >> 32) as usize % star_count
+        crate::rng::hash(seed, round as u64) as usize % star_count
     }
 
     /// Regenerates the starfield texture if the window has been resized since

@@ -1,3 +1,13 @@
+/// Mixes `seed` with `key` using a Weyl increment + SplitMix64 avalanche,
+/// producing a high-quality 64-bit hash. Suitable for deriving sub-seeds and
+/// picking deterministic indices.
+pub fn hash(seed: u64, key: u64) -> u64 {
+    let mut x = seed.wrapping_add(key.wrapping_mul(0x9e3779b97f4a7c15));
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
+    x ^ (x >> 31)
+}
+
 /// Minimal seeded RNG based on xorshift64.
 ///
 /// Not cryptographic, but uniform and fast enough for procedural generation.
