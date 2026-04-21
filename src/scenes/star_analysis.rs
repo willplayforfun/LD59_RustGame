@@ -29,10 +29,10 @@ const ANIM_DURATION: f32 = 0.6;
 const HOLD_DURATION: f32 = 1.5;
 const EXIT_DURATION: f32 = 0.5;
 
-/// Log-ratio tolerance for mass and period matching (≈ ±10%).
-const LOG_TOL: f32 = 0.10;
+/// Log-ratio tolerance for mass and period matching
+const LOG_TOL: f32 = 0.20;
 /// Absolute tolerance for eccentricity matching.
-const ECC_TOL: f32 = 0.05;
+const ECC_TOL: f32 = 0.12;
 
 #[derive(Clone, PartialEq)]
 enum ConfirmPhase { Idle, Animating, Holding, Exiting }
@@ -82,19 +82,13 @@ impl StarAnalysis {
                     self.confirm_elapsed = 0.0;
                 }
             }
-            ConfirmPhase::Holding => {
-                self.confirm_elapsed += get_frame_time();
-                if self.confirm_elapsed >= HOLD_DURATION {
-                    self.confirm_phase   = ConfirmPhase::Exiting;
-                    self.confirm_elapsed = 0.0;
-                }
-            }
+            ConfirmPhase::Holding => {}  // waits for the Continue button
             ConfirmPhase::Exiting => {
                 self.confirm_elapsed += get_frame_time();
                 if self.confirm_elapsed >= EXIT_DURATION {
                     let new_round = self.round.saturating_add(1);
                     let new_star  = pick_star(world.seed, new_round);
-                    return GameScene::InitialFadeIn(InitialFadeIn::new(new_round, new_star));
+                    return GameScene::InitialFadeIn(InitialFadeIn::new_returning(new_round, new_star));
                 }
             }
             ConfirmPhase::Idle => {}
@@ -146,23 +140,36 @@ impl StarAnalysis {
 
         // ── Confirm Planets button (left side, below star image) ──────────────
         let display_px  = STAR_TEX_PX as f32 * STAR_DISPLAY_SCALE;
-        let star_bot_y  = screen_height() * 0.35 + display_px / 2.0;
         let conf_btn_w  = 160.0;
         let conf_btn_h  = 36.0;
         let conf_win_h  = conf_btn_h + 10.0;
         let conf_win_x  = screen_width() / 6.0 - conf_btn_w / 2.0;
-        let conf_win_y  = star_bot_y + 16.0;
+        let conf_win_y  = screen_height() - conf_btn_h - 16.0;
 
         let mut confirm_clicked = false;
-        if self.confirm_phase == ConfirmPhase::Idle {
-            widgets::Window::new(3u64, vec2(conf_win_x, conf_win_y), vec2(conf_btn_w, conf_win_h))
-                .titlebar(false)
-                .movable(false)
-                .ui(&mut *root_ui(), |ui| {
-                    if Button::new("Confirm Planets").size(Vec2::new(conf_btn_w - 10.0, conf_btn_h)).ui(ui) {
-                        confirm_clicked = true;
-                    }
-                });
+        let mut continue_clicked = false;
+        match self.confirm_phase {
+            ConfirmPhase::Idle => {
+                widgets::Window::new(3u64, vec2(conf_win_x, conf_win_y), vec2(conf_btn_w, conf_win_h))
+                    .titlebar(false)
+                    .movable(false)
+                    .ui(&mut *root_ui(), |ui| {
+                        if Button::new("Confirm Planets").size(Vec2::new(conf_btn_w - 10.0, conf_btn_h)).ui(ui) {
+                            confirm_clicked = true;
+                        }
+                    });
+            }
+            ConfirmPhase::Holding => {
+                widgets::Window::new(3u64, vec2(conf_win_x, conf_win_y), vec2(conf_btn_w, conf_win_h))
+                    .titlebar(false)
+                    .movable(false)
+                    .ui(&mut *root_ui(), |ui| {
+                        if Button::new("Continue").size(Vec2::new(conf_btn_w - 10.0, conf_btn_h)).ui(ui) {
+                            continue_clicked = true;
+                        }
+                    });
+            }
+            _ => {}
         }
 
         root_ui().pop_skin();
@@ -172,8 +179,37 @@ impl StarAnalysis {
         }
 
         if confirm_clicked {
+            eprintln!("=== Confirm ===");
+            eprintln!("  Real planets ({}):", self.star_data.planets.len());
+            for (i, p) in self.star_data.planets.iter().enumerate() {
+                eprintln!("    [{}] mass={:.3}  period={:.3}  ecc={:.3}", i, p.mass, p.period, p.eccentricity);
+            }
+            eprintln!("  Guesses ({}):", self.planet_guesses.len());
+            for (i, g) in self.planet_guesses.iter().enumerate() {
+                eprintln!("    [{}] mass={:.3}  period={:.3}  ecc={:.3}", i, g.mass, g.period, g.eccentricity);
+            }
+            eprintln!("  Diff (guess vs best real match):");
+            for (gi, guess) in self.planet_guesses.iter().enumerate() {
+                if let Some(best) = self.star_data.planets.iter().min_by(|a, b| {
+                    let da = (guess.mass / a.mass).ln().abs() + (guess.period / a.period).ln().abs();
+                    let db = (guess.mass / b.mass).ln().abs() + (guess.period / b.period).ln().abs();
+                    da.partial_cmp(&db).unwrap()
+                }) {
+                    let mass_pct   = (guess.mass   / best.mass   - 1.0) * 100.0;
+                    let period_pct = (guess.period / best.period - 1.0) * 100.0;
+                    let ecc_abs    = guess.eccentricity - best.eccentricity;
+                    eprintln!("    guess[{}] vs real: mass {:+.1}%  period {:+.1}%  ecc {:+.3}",
+                              gi, mass_pct, period_pct, ecc_abs);
+                }
+            }
             self.confirm_results = match_planets(&self.planet_guesses, &self.star_data.planets);
+            eprintln!("  Results: {:?}", self.confirm_results);
             self.confirm_phase   = ConfirmPhase::Animating;
+            self.confirm_elapsed = 0.0;
+        }
+
+        if continue_clicked {
+            self.confirm_phase   = ConfirmPhase::Exiting;
             self.confirm_elapsed = 0.0;
         }
 

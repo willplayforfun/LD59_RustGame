@@ -22,6 +22,10 @@ impl InitialFadeIn {
         InitialFadeIn { round, selected_star, elapsed: 0.0 }
     }
 
+    pub fn new_returning(round: u8, selected_star: usize) -> Self {
+        InitialFadeIn { round, selected_star, elapsed: FADE_IN_END }
+    }
+
     pub fn update(self, _world: &mut World) -> GameScene {
         let elapsed = self.elapsed + get_frame_time();
         if elapsed >= FADE_OUT_END {

@@ -13,7 +13,7 @@ mod world;
 mod scenes;
 
 use scenes::{GameScene, InitialFadeIn};
-use star_rendering::{gaussian_psf, generate_starfield};
+use star_rendering::{gaussian_psf, generate_starfield, starfield_star_count};
 use world::World;
 
 struct GameState {
@@ -76,20 +76,21 @@ impl GameState {
         );
         star_tex.set_filter(FilterMode::Nearest);
 
-        let mut world = World { seed, starfield, ui_skin, psf, star_tex };
+        let star_count = starfield_star_count(w, h, 2.0);
+        let world = World { seed, star_count, starfield, ui_skin, psf, star_tex };
 
         let round = 1;
-        let selected_star = Self::pick_star(seed, round);
+        let selected_star = Self::pick_star(seed, round, world.star_count);
         let scene = GameScene::InitialFadeIn(InitialFadeIn::new(round, selected_star));
 
         GameState { round, selected_star, world, scene }
     }
 
-    /// Deterministically picks a star index for the given round.
-    fn pick_star(seed: u64, round: u8) -> usize {
+    /// Deterministically picks a star index in `0..star_count` for the given round.
+    fn pick_star(seed: u64, round: u8, star_count: usize) -> usize {
         let h = seed
             .wrapping_add((round as u64).wrapping_mul(0x9e3779b97f4a7c15));
-        (h >> 32) as usize
+        (h >> 32) as usize % star_count
     }
 
     fn update(mut self) -> Self {

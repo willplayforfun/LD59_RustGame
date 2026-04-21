@@ -137,6 +137,13 @@ pub fn generate_star(
 /// Stars are additively composited in **linear light** before gamma encoding,
 /// so overlapping halos add correctly without colour banding.
 ///
+/// Returns the number of stars `generate_starfield` will render for a given
+/// resolution and density.  Call this after generating the starfield to know
+/// the valid range of `selected_star` indices.
+pub fn starfield_star_count(width: usize, height: usize, density: f32) -> usize {
+    ((width * height) as f32 * density / 10_000.0).round() as usize
+}
+
 /// `density` — average stars per 10 000 px². 2.0–4.0 produces a natural field.
 /// `seed`    — RNG seed; the same seed always produces the same field.
 pub fn generate_starfield(
