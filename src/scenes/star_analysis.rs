@@ -20,8 +20,10 @@ const REDSHIFT_Y_MAX:   f32 =  150.0;
 const POSITION_Y_MIN:   f32 = -200.0;
 const POSITION_Y_MAX:   f32 =  200.0;
 
-const STAR_TEX_PX:       usize = 15;
-const STAR_DISPLAY_SCALE: f32  = 16.0;
+const STAR_TEX_PX:          usize = 15;
+const STAR_DISPLAY_SCALE:   f32   = 16.0;
+/// Multiplies the star wobble offset for visualization only — gameplay unchanged.
+const VISUAL_WOBBLE_SCALE:  f32   = 1.0;
 
 // ── Confirm sequence constants ────────────────────────────────────────────────
 
@@ -121,10 +123,12 @@ impl StarAnalysis {
                     let planet = &mut self.planet_guesses[i];
                     Group::new(hash!("planet", i), Vec2::new(group_w, PLANET_H))
                         .ui(ui, |ui| {
+                            ui.push_skin(&world.ui_skin_heading);
                             ui.label(None, &format!("Planet {}", i + 1));
-                            param_row(ui, group_w, "Mass",   &mut planet.mass,         0.1,  1.0,  0.1,  10.0, hash!("mass_btns",   i), hash!("mass_slider",   i));
-                            param_row(ui, group_w, "Period", &mut planet.period,        0.5,  5.0,  1.0, 100.0, hash!("period_btns", i), hash!("period_slider", i));
-                            param_row(ui, group_w, "Ecc",    &mut planet.eccentricity,  0.01, 0.1,  0.0,  0.95, hash!("ecc_btns",    i), hash!("ecc_slider",    i));
+                            ui.pop_skin();
+                            param_row(ui, group_w, "Planetary Mass",   &mut planet.mass,         0.1,  1.0,  0.1,  10.0, hash!("mass_btns",   i), hash!("mass_slider",   i));
+                            param_row(ui, group_w, "Orbital Period", &mut planet.period,        0.5,  5.0,  1.0, 100.0, hash!("period_btns", i), hash!("period_slider", i));
+                            param_row(ui, group_w, "Orbital Eccentricity",    &mut planet.eccentricity,  0.01, 0.1,  0.0,  0.95, hash!("ecc_btns",    i), hash!("ecc_slider",    i));
                         });
                 }
             });
@@ -222,11 +226,20 @@ impl StarAnalysis {
         let star_x = screen_width() * (1.0 / 6.0) - display_px / 2.0;
         let star_y = screen_height() * 0.35 - display_px / 2.0;
 
+        let redshift = predict_observations(&self.star_data.planets, self.scene_time, EDGE_ON).redshift;
+        let rs_norm  = (redshift / REDSHIFT_Y_MAX.abs()).clamp(-1.0, 1.0);
+        let tint = if rs_norm >= 0.0 {
+            Color::new(1.0, 1.0 - rs_norm * 0.35, 1.0 - rs_norm * 0.5, 1.0)
+        } else {
+            let t = -rs_norm;
+            Color::new(1.0 - t * 0.5, 1.0 - t * 0.2, 1.0, 1.0)
+        };
+
         draw_rectangle(star_x, star_y, display_px, display_px, BLACK);
         draw_texture_ex(
             &world.star_tex,
             star_x, star_y,
-            WHITE,
+            tint,
             DrawTextureParams {
                 dest_size: Some(vec2(display_px, display_px)),
                 ..Default::default()
@@ -310,9 +323,9 @@ fn draw_confirm_results(results: &[bool], alpha: f32) {
         if ok { draw_check(cx, cy, icon_r * 0.70, sym_col); }
         else  { draw_cross(cx, cy, icon_r * 0.55, sym_col); }
 
-        let lbl  = format!("P{}", i + 1);
-        let dims = measure_text(&lbl, None, 14, 1.0);
-        draw_text(&lbl, cx - dims.width / 2.0, cy + icon_r + 14.0, 14.0,
+        let lbl  = format!("Planet {}", i + 1);
+        let dims = measure_text(&lbl, None, 28, 1.0);
+        draw_text(&lbl, cx - dims.width / 2.0, cy + icon_r + 14.0, 28.0,
                   Color::new(0.85, 0.85, 0.85, alpha));
     }
 }
@@ -333,7 +346,8 @@ fn draw_cross(cx: f32, cy: f32, size: f32, col: Color) {
 // ─── Star texture refresh ─────────────────────────────────────────────────────
 
 fn refresh_star_texture(star: &StarData, time: f32, world: &mut World) {
-    let offset = star_pixel_offset(&star.planets, time, EDGE_ON);
+    let raw    = star_pixel_offset(&star.planets, time, EDGE_ON);
+    let offset = (raw.0 * VISUAL_WOBBLE_SCALE, raw.1 * VISUAL_WOBBLE_SCALE);
     let pixels = generate_star(STAR_TEX_PX, star.temperature, star.brightness, &world.psf, offset);
     world.star_tex.update(&Image {
         bytes:  pixels,
@@ -351,8 +365,8 @@ fn param_row(ui: &mut Ui, group_w: f32, name: &str, value: &mut f32, small: f32,
     const BTN_L_X:  f32 = BTN_LL_X + 33.0;
     const BTN_R_FROM_RIGHT:  f32 = 68.0;
     const BTN_RR_FROM_RIGHT: f32 = 35.0;
-    const BTN_Y:    f32 = 4.0;
-    const BTN_ROW_H: f32 = 28.0;
+    const BTN_Y:    f32 = 0.0;
+    const BTN_ROW_H: f32 = 20.0;
     const SLIDER_LEFT:  f32 = BTN_L_X + 22.0 + 2.0;
     const SLIDER_RIGHT: f32 = BTN_R_FROM_RIGHT + 2.0;
 
@@ -411,7 +425,7 @@ fn draw_graphs(real: &[Planet], guess: &[Planet], scene_time: f32) {
     let gw   = sw / 3.0;
     let gh   = sh / 3.0;
     let pad  = 8.0;
-    let lbl  = 16.0;
+    let lbl  = 32.0;
 
     let graphs = [
         ("Brightness", BRIGHTNESS_Y_MIN, BRIGHTNESS_Y_MAX, 0usize),
@@ -428,7 +442,7 @@ fn draw_graphs(real: &[Planet], guess: &[Planet], scene_time: f32) {
             draw_line(gx, panel_y + gh, gx + gw, panel_y + gh, 1.0, Color::from_rgba(70, 70, 90, 255));
         }
 
-        draw_text(label, gx + pad, panel_y + lbl, 14.0, Color::from_rgba(160, 160, 180, 255));
+        draw_text(label, gx + pad, panel_y + lbl, 28.0, Color::from_rgba(160, 160, 180, 255));
 
         let ix = gx + pad;
         let iy = panel_y + lbl + 4.0;
