@@ -3,7 +3,10 @@ use macroquad::ui::{hash, root_ui, widgets::{self, Button, Group}, Id, Ui};
 use super::GameScene;
 use super::initial_fade_in::InitialFadeIn;
 use crate::world::World;
-use crate::star::{Planet, StarData, generate_star_data};
+use crate::star::{Planet, StarData, generate_star_data,
+                  MASS_MIN, MASS_MAX, MASS_STEP,
+                  PERIOD_MIN, PERIOD_MAX, PERIOD_STEP,
+                  ECC_MIN, ECC_MAX, ECC_STEP};
 use crate::star_rendering::generate_star;
 use crate::simulation::{predict_observations, star_pixel_offset, EDGE_ON};
 
@@ -113,6 +116,8 @@ impl StarAnalysis {
 
         root_ui().push_skin(&world.ui_skin);
 
+        let mut remove_planet: Option<usize> = None;
+
         widgets::Window::new(1u64, vec2(panel_x, 0.0), vec2(panel_w, screen_height() - ADD_WIN_H))
             .label("Planets")
             .titlebar(true)
@@ -126,9 +131,12 @@ impl StarAnalysis {
                             ui.push_skin(&world.ui_skin_heading);
                             ui.label(None, &format!("Planet {}", i + 1));
                             ui.pop_skin();
-                            param_row(ui, group_w, "Planetary Mass",   &mut planet.mass,         0.1,  1.0,  0.1,  10.0, hash!("mass_btns",   i), hash!("mass_slider",   i));
-                            param_row(ui, group_w, "Orbital Period", &mut planet.period,        0.5,  5.0,  1.0, 100.0, hash!("period_btns", i), hash!("period_slider", i));
-                            param_row(ui, group_w, "Orbital Eccentricity",    &mut planet.eccentricity,  0.01, 0.1,  0.0,  0.95, hash!("ecc_btns",    i), hash!("ecc_slider",    i));
+                            if ui.button(Vec2::new(group_w - 28.0, 0.0), "-") {
+                                remove_planet = Some(i);
+                            }
+                            param_row(ui, group_w, "Planetary Mass",        &mut planet.mass,         MASS_STEP,   MASS_STEP   * 10.0, MASS_MIN,   MASS_MAX,   hash!("mass_btns",   i), hash!("mass_slider",   i));
+                            param_row(ui, group_w, "Orbital Period",        &mut planet.period,       PERIOD_STEP, PERIOD_STEP * 10.0, PERIOD_MIN, PERIOD_MAX, hash!("period_btns", i), hash!("period_slider", i));
+                            param_row(ui, group_w, "Orbital Eccentricity",  &mut planet.eccentricity, ECC_STEP,    ECC_STEP    * 10.0, ECC_MIN,    ECC_MAX,    hash!("ecc_btns",    i), hash!("ecc_slider",    i));
                         });
                 }
             });
@@ -152,34 +160,37 @@ impl StarAnalysis {
 
         let mut confirm_clicked = false;
         let mut continue_clicked = false;
-        match self.confirm_phase {
-            ConfirmPhase::Idle => {
-                widgets::Window::new(3u64, vec2(conf_win_x, conf_win_y), vec2(conf_btn_w, conf_win_h))
-                    .titlebar(false)
-                    .movable(false)
-                    .ui(&mut *root_ui(), |ui| {
-                        if Button::new("Confirm Planets").size(Vec2::new(conf_btn_w - 10.0, conf_btn_h)).ui(ui) {
-                            confirm_clicked = true;
-                        }
-                    });
-            }
-            ConfirmPhase::Holding => {
-                widgets::Window::new(3u64, vec2(conf_win_x, conf_win_y), vec2(conf_btn_w, conf_win_h))
-                    .titlebar(false)
-                    .movable(false)
-                    .ui(&mut *root_ui(), |ui| {
-                        if Button::new("Continue").size(Vec2::new(conf_btn_w - 10.0, conf_btn_h)).ui(ui) {
-                            continue_clicked = true;
-                        }
-                    });
-            }
-            _ => {}
+        if self.confirm_phase == ConfirmPhase::Idle {
+            widgets::Window::new(3u64, vec2(conf_win_x, conf_win_y), vec2(conf_btn_w, conf_win_h))
+                .titlebar(false)
+                .movable(false)
+                .ui(&mut *root_ui(), |ui| {
+                    if Button::new("Confirm Planets").size(Vec2::new(conf_btn_w - 10.0, conf_btn_h)).ui(ui) {
+                        confirm_clicked = true;
+                    }
+                });
         }
 
         root_ui().pop_skin();
 
+        if self.confirm_phase == ConfirmPhase::Holding {
+            root_ui().push_skin(&world.ui_skin_blue_btn);
+            widgets::Window::new(3u64, vec2(conf_win_x, conf_win_y), vec2(conf_btn_w, conf_win_h))
+                .titlebar(false)
+                .movable(false)
+                .ui(&mut *root_ui(), |ui| {
+                    if Button::new("Continue").size(Vec2::new(conf_btn_w - 10.0, conf_btn_h)).ui(ui) {
+                        continue_clicked = true;
+                    }
+                });
+            root_ui().pop_skin();
+        }
+
         if add_planet {
             self.planet_guesses.push(Planet { mass: 1.0, period: 10.0, eccentricity: 0.0, direction: (1.0, 0.0) });
+        }
+        if let Some(idx) = remove_planet {
+            self.planet_guesses.remove(idx);
         }
 
         if confirm_clicked {

@@ -2,6 +2,20 @@
 
 use crate::rng::Rng;
 
+// ─── Planet parameter bounds (shared with UI) ────────────────────────────────
+
+pub const MASS_MIN:    f32 = 0.1;
+pub const MASS_MAX:    f32 = 10.0;
+pub const MASS_STEP:   f32 = 0.1;   // fine adjustment increment
+
+pub const PERIOD_MIN:  f32 = 1.0;
+pub const PERIOD_MAX:  f32 = 100.0;
+pub const PERIOD_STEP: f32 = 0.5;
+
+pub const ECC_MIN:     f32 = 0.0;
+pub const ECC_MAX:     f32 = 0.95;
+pub const ECC_STEP:    f32 = 0.01;
+
 // ─── Procedural star data ─────────────────────────────────────────────────────
 
 /// Derives an independent seed for star `index` from the global world seed.
@@ -42,6 +56,10 @@ pub struct StarData {
     pub planets: Vec<Planet>,
 }
 
+fn quantize(val: f32, step: f32) -> f32 {
+    (val / step).round() * step
+}
+
 /// Generates all properties for star `index` deterministically from
 /// `global_seed`.  `difficulty` (1–6) controls how many planets may appear:
 /// low difficulties almost always yield 1; high difficulties can yield 2–3.
@@ -65,10 +83,10 @@ pub fn generate_star_data(global_seed: u64, index: usize, difficulty: u8) -> Sta
         .map(|_| {
             let angle = rng.next_f32() * std::f32::consts::TAU;
             Planet {
-                mass:         rng.range_f32(0.3, 5.0),
-                period:       rng.range_f32(5.0, 40.0),
-                eccentricity: rng.range_f32(0.0, 0.7),
-                direction:    (1.0, 0.0)//(angle.cos(), angle.sin()),
+                mass:         quantize(rng.range_f32(0.3, 5.0),  MASS_STEP  ).clamp(MASS_MIN,   MASS_MAX),
+                period:       quantize(rng.range_f32(5.0, 40.0), PERIOD_STEP).clamp(PERIOD_MIN, PERIOD_MAX),
+                eccentricity: quantize(rng.range_f32(0.0, 0.7),  ECC_STEP   ).clamp(ECC_MIN,    ECC_MAX),
+                direction:    (1.0, 0.0),
             }
         })
         .collect();
