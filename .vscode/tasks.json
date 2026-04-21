@@ -48,6 +48,34 @@
             "group": "build",
             "presentation": { "reveal": "always", "panel": "shared" },
             "problemMatcher": "$rustc"
+        },
+        {
+            "label": "build web (windows)",
+            "type": "shell",
+            "command": ".\\web\\scripts\\build_web.ps1",
+            "windows": { "command": ".\\web\\scripts\\build_web.ps1" },
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": "$rustc"
+        },
+        {
+            "label": "build web (linux/mac)",
+            "type": "shell",
+            "command": "bash web/scripts/build_web.sh",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": "$rustc"
+        },
+        {
+            "label": "serve web",
+            "type": "shell",
+            "command": "cargo install basic-http-server 2>$null; basic-http-server web/Survey_web",
+            "windows": { "command": "cargo install basic-http-server 2>$null; basic-http-server web/Survey_web" },
+            "linux": { "command": "cargo install basic-http-server 2>/dev/null; basic-http-server web/Survey_web" },
+            "osx": { "command": "cargo install basic-http-server 2>/dev/null; basic-http-server web/Survey_web" },
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+            "problemMatcher": []
         }
     ]
 }

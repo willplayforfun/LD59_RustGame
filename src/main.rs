@@ -1,6 +1,7 @@
 use macroquad::prelude::*;
 use macroquad::ui::{root_ui, Skin};
 
+#[cfg(not(target_arch = "wasm32"))]
 mod cpal_test;
 mod dasp_test;
 mod spectrum;

@@ -9,5 +9,13 @@ macroquad = "0.4"
 dasp = { version = "0.11", features = ["all"] }
 hound = "3.5"
 # for cpal
-cpal = "0.15"
 anyhow = "1.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cpal = "0.15"
+
+
+[profile.release]
+opt-level = "z"
+strip = true
+lto = true
