@@ -85,6 +85,8 @@ Notes:
 - All buttons should have a tooltip that appears near it when hovered.
 - All text should be localizable.
 - Everything should be easily playable with a gamepad.
+- Make sure generated planets have stable orbits, cannot occupy the same space or be on track to hit each other.
+- Need to test switching planet mass to planet radius... and whether we should have a fourth slider or just replace.
 
 Achievements:
 - Win a Random Run
